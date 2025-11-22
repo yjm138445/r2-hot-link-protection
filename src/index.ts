@@ -9,43 +9,46 @@ const BUCKET  = 'MEDIA';         // 对应 wrangler 的 r2_buckets 绑定名
 
 export default {
   async fetch(request: Request, env: Env) {
+    console.log('Received request:', request.method, request.url);
 
     /* 0. 读取 Referer 并做白名单校验 */
     const refererHeader = request.headers.get('Referer') || '';
+    const originHeader = request.headers.get('Origin') || '';
     let refererHost = '';
     let refererOrigin = '';
     
+    // 1. 尝试从Referer头解析
     try {
       if (refererHeader) {
         const url = new URL(refererHeader);
         refererHost = url.hostname;
         refererOrigin = url.origin;
+        console.log('Referer host:', refererHost);
       }
-      console.log('Referer host:', refererHost);
     } catch (e) {
       console.error('Error parsing Referer:', e);
     }
 
-    // 如果没有Referer，尝试从Origin头获取
-    if (!refererHost) {
-      const origin = request.headers.get('Origin') || '';
-      if (origin) {
-        try {
-          const url = new URL(origin);
-          refererHost = url.hostname;
-          refererOrigin = origin;
-          console.log('Using Origin host:', refererHost);
-        } catch (e) {
-          console.error('Error parsing Origin:', e);
-        }
+    // 2. 如果没有获取到Referer，尝试从Origin头获取
+    if (!refererHost && originHeader) {
+      try {
+        const url = new URL(originHeader);
+        refererHost = url.hostname;
+        refererOrigin = originHeader;
+        console.log('Using Origin host:', refererHost);
+      } catch (e) {
+        console.error('Error parsing Origin:', e);
       }
     }
 
-    const isAllowed = ALLOWED.has(refererHost);
-    console.log('Is referer allowed:', isAllowed);
+    // 3. 严格检查域名
+    const isAllowed = refererHost && ALLOWED.has(refererHost);
+    console.log('Is referer allowed:', isAllowed, 'Referer Host:', refererHost);
     
     if (!isAllowed) {
-      return new Response(`blocked: ${refererHost || 'no referer'}`, { status: 403 });
+      const blockedReason = refererHost ? `blocked: ${refererHost} (not in whitelist)` : 'blocked: no referer';
+      console.log('Access blocked:', blockedReason);
+      return new Response(blockedReason, { status: 403 });
     }
 
     /* 0-bis. 预检请求处理 */
@@ -62,9 +65,19 @@ export default {
     }
     
     /* 1. 解析对象 Key */
-    const url = new URL(request.url);
-    const key = decodeURIComponent(url.pathname.slice(1));
-    if (!key) return new Response('bad request', { status: 400 });
+    let key = '';
+    try {
+      const url = new URL(request.url);
+      key = decodeURIComponent(url.pathname.slice(1));
+      console.log('Requested key:', key);
+      if (!key) {
+        console.log('Bad request: empty key');
+        return new Response('bad request', { status: 400 });
+      }
+    } catch (e) {
+      console.error('Error parsing URL:', e);
+      return new Response('invalid request', { status: 400 });
+    }
 
     /* 2. 处理 Range（播放器基本都会带） */
     const range = request.headers.get('Range');
@@ -78,8 +91,18 @@ export default {
     }
 
     /* 3. 读取 R2 */
-    const obj = await env[BUCKET].get(key, opts);
-    if (!obj) return new Response('404', { status: 404 });
+    let obj;
+    try {
+      obj = await env[BUCKET].get(key, opts);
+      console.log('R2 get result:', obj ? 'success' : 'not found');
+      if (!obj) {
+        console.log(`Object not found: ${key}`);
+        return new Response('404', { status: 404 });
+      }
+    } catch (e) {
+      console.error('Error reading from R2:', e);
+      return new Response('server error', { status: 500 });
+    }
 
     /* 4. 生成响应 + CORS/CORP 头 */
     const h = new Headers(obj.httpMetadata);
