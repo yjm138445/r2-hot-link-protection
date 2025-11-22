@@ -4,7 +4,7 @@ const ALLOWED = new Set([
   'www.bilibili.com',
   'www.556ys.com'
 ]);
-const CORP    = 'same-site';     // same-origin 也行
+const CORP    = 'same-origin';     // same-origin 也行
 const BUCKET  = 'MEDIA';         // 对应 wrangler 的 r2_buckets 绑定名
 
 export default {
@@ -60,37 +60,19 @@ export default {
 
     // 获取请求的Host头，用于检查是否是直接从白名单域名访问
     const requestHost = request.headers.get('Host') || '';
-    const normalizedRequestHost = requestHost.toLowerCase(); // 标准化Host头为小写
     
     // 3. 增强的域名检查：
     //    - 允许带有白名单域名Referer/Origin的请求访问
     //    - 允许直接从白名单域名访问（即使没有Referer）
     //    - 阻止没有Referer且不是白名单域名的请求
     const isRefererAllowed = refererHost && ALLOWED.has(refererHost);
-    
-    // 增强的Host头检查逻辑，先检查完全匹配，再检查部分匹配
-    let isDirectAccessFromWhitelist = false;
-    if (!refererHost) {
-      // 首先检查是否完全匹配
-      isDirectAccessFromWhitelist = ALLOWED.has(normalizedRequestHost);
-      
-      // 如果不完全匹配，检查是否部分包含（处理子域名或端口情况）
-      if (!isDirectAccessFromWhitelist) {
-        for (const allowedDomain of ALLOWED) {
-          if (normalizedRequestHost.includes(allowedDomain)) {
-            isDirectAccessFromWhitelist = true;
-            break;
-          }
-        }
-      }
-    }
-    
+    const isDirectAccessFromWhitelist = !refererHost && ALLOWED.has(requestHost);
     const isAllowed = isRefererAllowed || isDirectAccessFromWhitelist;
     
     console.log('Access check:', { 
       isAllowed, 
       refererHost, 
-      normalizedRequestHost, 
+      requestHost, 
       isRefererAllowed, 
       isDirectAccessFromWhitelist 
     });
@@ -105,7 +87,7 @@ export default {
       } else {
         blockedReason = 'blocked';
       }
-      console.log(blockedReason, { refererHeader, originHeader, normalizedRequestHost });
+      console.log(blockedReason, { refererHeader, originHeader, requestHost });
       return new Response(blockedReason, {
         status: 403,
         headers: {
@@ -169,34 +151,11 @@ export default {
 
     /* 4. 生成响应 + CORS/CORP 头 */
     const h = new Headers(obj.httpMetadata);
-    // h.set('Cross-Origin-Resource-Policy', CORP); // 如果 worker 与目标域名在同一个根域名下，可以考虑打开
-    
-    // 找到匹配的白名单域名，用于设置CORS头
-    let matchedDomain = '';
-    if (!refererOrigin) {
-      // 对于没有Referer/Origin的请求，从Host头中查找匹配的白名单域名
-      for (const allowedDomain of ALLOWED) {
-        if (normalizedRequestHost.includes(allowedDomain) || allowedDomain.includes(normalizedRequestHost)) {
-          matchedDomain = allowedDomain;
-          break;
-        }
-      }
-    }
-    
-    // 统一添加CORS头，确保所有白名单域名请求都能获得正确的CORS设置
-    if (matchedDomain) {
-      // 没有Referer/Origin时，使用匹配的白名单域名
-      h.set('Access-Control-Allow-Origin', `https://${matchedDomain}`);
-      h.set('Access-Control-Allow-Credentials', 'true');
-      h.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
-      console.log('Added CORS headers for whitelist domain:', matchedDomain);
-    } else {
-      // 常规情况，使用Referer/Origin
-      h.set('Access-Control-Allow-Origin', refererOrigin || '*');
-      h.set('Access-Control-Allow-Credentials', 'true');
-      h.set('Vary', 'Origin'); // 避免缓存污染
-      h.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
-    }
+    h.set('Cross-Origin-Resource-Policy', CORP); // 如果 worker 与目标域名在同一个根域名下，可以考虑打开
+    h.set('Access-Control-Allow-Origin',  refererOrigin);
+    h.set('Access-Control-Allow-Credentials', 'true');
+    h.set('Vary',                         'Origin');          // 避免缓存污染
+    h.set('Access-Control-Expose-Headers','Content-Length, Content-Range, Accept-Ranges');
 
     if (range && opts?.range) {
       const size   = obj.size;
