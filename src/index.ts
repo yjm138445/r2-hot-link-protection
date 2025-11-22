@@ -11,14 +11,43 @@ export default {
 
     /* 0. 读取 Referer 并做白名单校验 */
     const refererHeader = request.headers.get('Referer') || '';
-    const refererHost   = refererHeader ? new URL(refererHeader).hostname : '';
-    const refererOrigin = refererHeader ? new URL(refererHeader).origin   : '';
-
-    if (!ALLOWED.has(refererHost)) {
-      return new Response('blocked', { status: 403 });
+    let refererHost = '';
+    let refererOrigin = '';
+    
+    try {
+      if (refererHeader) {
+        const url = new URL(refererHeader);
+        refererHost = url.hostname;
+        refererOrigin = url.origin;
+      }
+      console.log('Referer host:', refererHost);
+    } catch (e) {
+      console.error('Error parsing Referer:', e);
     }
 
-    /* 0-bis. 预检请求（极少数场景，但写上更完整） */
+    // 如果没有Referer，尝试从Origin头获取
+    if (!refererHost) {
+      const origin = request.headers.get('Origin') || '';
+      if (origin) {
+        try {
+          const url = new URL(origin);
+          refererHost = url.hostname;
+          refererOrigin = origin;
+          console.log('Using Origin host:', refererHost);
+        } catch (e) {
+          console.error('Error parsing Origin:', e);
+        }
+      }
+    }
+
+    const isAllowed = ALLOWED.has(refererHost);
+    console.log('Is referer allowed:', isAllowed);
+    
+    if (!isAllowed) {
+      return new Response(`blocked: ${refererHost || 'no referer'}`, { status: 403 });
+    }
+
+    /* 0-bis. 预检请求处理 */
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
@@ -30,7 +59,7 @@ export default {
         }
       });
     }
-
+    
     /* 1. 解析对象 Key */
     const url = new URL(request.url);
     const key = decodeURIComponent(url.pathname.slice(1));
@@ -55,6 +84,7 @@ export default {
     const h = new Headers(obj.httpMetadata);
     // h.set('Cross-Origin-Resource-Policy', CORP); // 如果 worker 与目标域名在同一个根域名下，可以考虑打开
     h.set('Access-Control-Allow-Origin',  refererOrigin);
+    h.set('Access-Control-Allow-Credentials', 'true');
     h.set('Vary',                         'Origin');          // 避免缓存污染
     h.set('Access-Control-Expose-Headers','Content-Length, Content-Range, Accept-Ranges');
 
