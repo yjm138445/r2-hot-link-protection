@@ -1,8 +1,8 @@
 // 修改这个列表，更新为自己的 domain list
 const ALLOWED = new Set([
   'www.dm147.cc',
-  'www.556ys.com',
-  'www.bilibili.com'
+  'play.dm147.cc',
+  'www.556ys.com'
 ]);
 const CORP    = 'same-site';     // same-origin 也行
 const BUCKET  = 'MEDIA';         // 对应 wrangler 的 r2_buckets 绑定名
@@ -41,27 +41,12 @@ export default {
       }
     }
 
-    // 获取请求的目标主机（worker自己的域名）
-    const requestHost = request.headers.get('host') || '';
-    
-    // 3. 检查域名：
-    //    - 如果有Referer/Origin且在白名单中允许访问
-    //    - 如果是直接访问worker自己的域名也允许（处理no-referrer情况）
-    const isRefererAllowed = refererHost && ALLOWED.has(refererHost);
-    const isDirectAccess = !refererHost && requestHost.includes('dm147.cc');
-    const isAllowed = isRefererAllowed || isDirectAccess;
-    
-    console.log('Access check:', { isRefererAllowed, isDirectAccess, refererHost, requestHost });
+    // 3. 严格检查域名，只允许白名单中的Referer/Origin访问
+    const isAllowed = refererHost && ALLOWED.has(refererHost);
+    console.log('Access check:', { isAllowed, refererHost });
     
     if (!isAllowed) {
-      let blockedReason = '';
-      if (refererHost) {
-        blockedReason = `blocked: ${refererHost} (not in whitelist)`;
-      } else if (!requestHost.includes('dm147.cc')) {
-        blockedReason = `blocked: no referer and not direct access to dm147.cc`;
-      } else {
-        blockedReason = 'blocked: unknown reason';
-      }
+      const blockedReason = refererHost ? `blocked: ${refererHost} (not in whitelist)` : 'blocked: no referer';
       console.log('Access blocked:', blockedReason);
       return new Response(blockedReason, { status: 403 });
     }
