@@ -2,6 +2,7 @@
 const ALLOWED = new Set([
   'www.dm147.cc',
   'play.dm147.cc',
+  'www.bilibili.com',
   'www.556ys.com'
 ]);
 const CORP    = 'same-site';     // same-origin 也行
@@ -17,38 +18,70 @@ export default {
     let refererHost = '';
     let refererOrigin = '';
     
-    // 1. 尝试从Referer头解析
+    // 增强的域名验证逻辑
+    console.log('Headers received:', { referer: refererHeader, origin: originHeader });
+    
+    // 1. 尝试从Referer头解析 - 更健壮的处理
     try {
       if (refererHeader) {
         const url = new URL(refererHeader);
-        refererHost = url.hostname;
+        refererHost = url.hostname.toLowerCase(); // 转换为小写以确保大小写不敏感的匹配
         refererOrigin = url.origin;
-        console.log('Referer host:', refererHost);
+        console.log('Parsed Referer host:', refererHost);
       }
     } catch (e) {
-      console.error('Error parsing Referer:', e);
+      console.error('Error parsing Referer:', e, 'Referer value:', refererHeader);
     }
 
     // 2. 如果没有获取到Referer，尝试从Origin头获取
     if (!refererHost && originHeader) {
       try {
         const url = new URL(originHeader);
-        refererHost = url.hostname;
+        refererHost = url.hostname.toLowerCase();
         refererOrigin = originHeader;
-        console.log('Using Origin host:', refererHost);
+        console.log('Parsed Origin host:', refererHost);
       } catch (e) {
-        console.error('Error parsing Origin:', e);
+        console.error('Error parsing Origin:', e, 'Origin value:', originHeader);
+      }
+    }
+    
+    // 3. 特殊处理：检查是否是白名单中的域名，但格式可能有细微差异
+    if (!refererHost && (refererHeader || originHeader)) {
+      console.log('Fallback check for whitelist domains...');
+      const checkStr = (refererHeader || originHeader).toLowerCase();
+      for (const allowedDomain of ALLOWED) {
+        if (checkStr.includes(allowedDomain)) {
+          refererHost = allowedDomain;
+          refererOrigin = `https://${allowedDomain}`; // 设置一个标准的origin
+          console.log('Fallback matched allowed domain:', allowedDomain);
+          break;
+        }
       }
     }
 
-    // 3. 严格检查域名，只允许白名单中的Referer/Origin访问
+    // 3. 精确检查域名：
+    //    - 只允许带有白名单域名Referer/Origin的请求访问
+    //    - 阻止没有Referer或Referer不在白名单中的请求
     const isAllowed = refererHost && ALLOWED.has(refererHost);
     console.log('Access check:', { isAllowed, refererHost });
     
     if (!isAllowed) {
-      const blockedReason = refererHost ? `blocked: ${refererHost} (not in whitelist)` : 'blocked: no referer';
-      console.log('Access blocked:', blockedReason);
-      return new Response(blockedReason, { status: 403 });
+      // 4. 输出错误信息 - 更详细的诊断
+      let blockedReason;
+      if (refererHost) {
+        blockedReason = `blocked: ${refererHost} (not in whitelist)`;
+      } else if (refererHeader || originHeader) {
+        blockedReason = `blocked: could not validate domain from headers`;
+      } else {
+        blockedReason = 'blocked: no referer';
+      }
+      console.log(blockedReason, { refererHeader, originHeader });
+      return new Response(blockedReason, {
+        status: 403,
+        headers: {
+          'Content-Type': 'text/plain'
+        }
+      });
     }
 
     /* 0-bis. 预检请求处理 */
