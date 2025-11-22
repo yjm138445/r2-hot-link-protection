@@ -60,47 +60,25 @@ export default {
 
     // 获取请求的Host头，用于检查是否是直接从白名单域名访问
     const requestHost = request.headers.get('Host') || '';
-    const normalizedRequestHost = requestHost.toLowerCase(); // 转换为小写以确保大小写不敏感的匹配
     
     // 3. 增强的域名检查：
-    //    - 严格验证：只有白名单域名才能访问资源
-    //    - 阻止所有非白名单域名或源地址的请求
+    //    - 允许带有白名单域名Referer/Origin的请求访问
+    //    - 允许直接从白名单域名访问（即使没有Referer）
+    //    - 阻止没有Referer且不是白名单域名的请求
     const isRefererAllowed = refererHost && ALLOWED.has(refererHost);
-    
-    // 改进的Host头检查逻辑：确保大小写不敏感，并且能够正确匹配白名单域名
-    let isDirectAccessFromWhitelist = false;
-    if (!refererHost && normalizedRequestHost) {
-      // 检查是否完全匹配
-      if (ALLOWED.has(normalizedRequestHost)) {
-        isDirectAccessFromWhitelist = true;
-      } else {
-        // 检查是否部分匹配（例如处理子域名或带端口的情况）
-        for (const allowedDomain of ALLOWED) {
-          if (normalizedRequestHost.includes(allowedDomain)) {
-            isDirectAccessFromWhitelist = true;
-            break;
-          }
-        }
-      }
-    }
-    
-    // 严格的验证逻辑：只有两种情况允许访问
-    // 1. 有Referer且Referer在白名单中
-    // 2. 没有Referer但请求的Host在白名单中
-    // 其他所有情况（包括非白名单域名或源地址）都直接返回403
+    const isDirectAccessFromWhitelist = !refererHost && ALLOWED.has(requestHost);
     const isAllowed = isRefererAllowed || isDirectAccessFromWhitelist;
     
     console.log('Access check:', { 
       isAllowed, 
       refererHost, 
-      requestHost: normalizedRequestHost, 
+      requestHost, 
       isRefererAllowed, 
       isDirectAccessFromWhitelist 
     });
     
     if (!isAllowed) {
-      // 4. 严格的访问控制：非白名单域名或源地址直接返回403
-      // 只有白名单域名才能访问资源，其他所有情况都将被阻止
+      // 4. 输出错误信息 - 更详细的诊断
       let blockedReason;
       if (refererHost) {
         blockedReason = `blocked: ${refererHost} (not in whitelist)`;
@@ -109,7 +87,7 @@ export default {
       } else {
         blockedReason = 'blocked: no referer and not direct access from whitelist domain';
       }
-      console.log(blockedReason, { refererHeader, originHeader, requestHost: normalizedRequestHost });
+      console.log(blockedReason, { refererHeader, originHeader, requestHost });
       return new Response(blockedReason, {
         status: 403,
         headers: {
