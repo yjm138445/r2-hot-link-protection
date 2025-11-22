@@ -1,7 +1,6 @@
 // 修改这个列表，更新为自己的 domain list
 const ALLOWED = new Set([
   'www.dm147.cc',
-  'play.dm147.cc',
   'www.bilibili.com',
   'www.556ys.com'
 ]);
@@ -63,11 +62,15 @@ export default {
     const requestHost = request.headers.get('Host') || '';
     
     // 3. 增强的域名检查：
-    //    - 允许带有白名单域名Referer/Origin的请求访问
-    //    - 允许直接从白名单域名访问（即使没有Referer）
-    //    - 阻止没有Referer且不是白名单域名的请求
+    //    - 严格验证：只有白名单域名才能访问资源
+    //    - 阻止所有非白名单域名或源地址的请求
     const isRefererAllowed = refererHost && ALLOWED.has(refererHost);
     const isDirectAccessFromWhitelist = !refererHost && ALLOWED.has(requestHost);
+    
+    // 严格的验证逻辑：只有两种情况允许访问
+    // 1. 有Referer且Referer在白名单中
+    // 2. 没有Referer但请求的Host在白名单中
+    // 其他所有情况（包括非白名单域名或源地址）都直接返回403
     const isAllowed = isRefererAllowed || isDirectAccessFromWhitelist;
     
     console.log('Access check:', { 
@@ -79,7 +82,8 @@ export default {
     });
     
     if (!isAllowed) {
-      // 4. 输出错误信息 - 更详细的诊断
+      // 4. 严格的访问控制：非白名单域名或源地址直接返回403
+      // 只有白名单域名才能访问资源，其他所有情况都将被阻止
       let blockedReason;
       if (refererHost) {
         blockedReason = `blocked: ${refererHost} (not in whitelist)`;
