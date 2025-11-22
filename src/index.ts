@@ -21,24 +21,18 @@ export default {
         const url = new URL(refererHeader);
         refererHost = url.hostname;
         refererOrigin = url.origin;
-      } else {
-        // 如果没有Referer头，尝试使用请求的Host头
-        const requestHost = request.headers.get('Host') || '';
-        console.log('No Referer, trying Host header:', requestHost);
-        refererHost = requestHost;
-        refererOrigin = `https://${requestHost}`;
       }
-      console.log('Final host to check:', refererHost);
+      console.log('Parsed Referer host:', refererHost);
     } catch (e) {
-      console.error('Error parsing headers:', e);
+      console.error('Error parsing Referer URL:', e);
     }
 
     // 检查是否在白名单中
     const isAllowed = ALLOWED.has(refererHost);
-    console.log('Is host allowed:', isAllowed);
+    console.log('Is referer allowed:', isAllowed);
     
     if (!isAllowed) {
-      return new Response(`blocked: ${refererHost || 'no referer11'}`, { status: 403 });
+      return new Response(`blocked: ${refererHost || 'no referer'}`, { status: 403 });
     }
 
     /* 0-bis. 预检请求（极少数场景，但写上更完整） */
