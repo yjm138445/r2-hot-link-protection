@@ -2,8 +2,8 @@
 const ALLOWED = new Set([
   'www.dm147.cc',
   'play.dm147.cc',
-  'www.556ys.com',
-  'www.bilibili.com'
+  'www.bilibili.com',
+  'www.556ys.com'
 ]);
 const CORP    = 'same-site';     // same-origin 也行
 const BUCKET  = 'MEDIA';         // 对应 wrangler 的 r2_buckets 绑定名
@@ -59,11 +59,24 @@ export default {
       }
     }
 
-    // 3. 精确检查域名：
-    //    - 只允许带有白名单域名Referer/Origin的请求访问
-    //    - 阻止没有Referer或Referer不在白名单中的请求
-    const isAllowed = refererHost && ALLOWED.has(refererHost);
-    console.log('Access check:', { isAllowed, refererHost });
+    // 获取请求的Host头，用于检查是否是直接从白名单域名访问
+    const requestHost = request.headers.get('Host') || '';
+    
+    // 3. 增强的域名检查：
+    //    - 允许带有白名单域名Referer/Origin的请求访问
+    //    - 允许直接从白名单域名访问（即使没有Referer）
+    //    - 阻止没有Referer且不是白名单域名的请求
+    const isRefererAllowed = refererHost && ALLOWED.has(refererHost);
+    const isDirectAccessFromWhitelist = !refererHost && ALLOWED.has(requestHost);
+    const isAllowed = isRefererAllowed || isDirectAccessFromWhitelist;
+    
+    console.log('Access check:', { 
+      isAllowed, 
+      refererHost, 
+      requestHost, 
+      isRefererAllowed, 
+      isDirectAccessFromWhitelist 
+    });
     
     if (!isAllowed) {
       // 4. 输出错误信息 - 更详细的诊断
@@ -73,9 +86,9 @@ export default {
       } else if (refererHeader || originHeader) {
         blockedReason = `blocked: could not validate domain from headers`;
       } else {
-        blockedReason = 'blocked: no referer';
+        blockedReason = 'blocked: no referer and not direct access from whitelist domain';
       }
-      console.log(blockedReason, { refererHeader, originHeader });
+      console.log(blockedReason, { refererHeader, originHeader, requestHost });
       return new Response(blockedReason, {
         status: 403,
         headers: {
