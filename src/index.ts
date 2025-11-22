@@ -15,7 +15,7 @@ export default {
     const refererOrigin = refererHeader ? new URL(refererHeader).origin   : '';
 
     if (!ALLOWED.has(refererHost)) {
-      return new Response('blocked', { status: 403 });
+      return new Response('blocked11'+!ALLOWED.has(refererHost), { status: 403 });
     }
 
     /* 0-bis. 预检请求（极少数场景，但写上更完整） */
