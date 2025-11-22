@@ -2,6 +2,7 @@
 const ALLOWED = new Set([
   'www.dm147.cc',
   'play.dm147.cc',
+  'www.556ys.com',
   'www.bilibili.com'
 ]);
 const CORP    = 'same-site';     // same-origin 也行
