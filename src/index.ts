@@ -2,7 +2,6 @@
 const ALLOWED = new Set([
   'www.dm147.cc',
   'www.bilibili.com',
-  'play.dm147.cc',
   'www.556ys.com'
 ]);
 const CORP    = 'same-site';     // same-origin 也行
@@ -171,10 +170,29 @@ export default {
     /* 4. 生成响应 + CORS/CORP 头 */
     const h = new Headers(obj.httpMetadata);
     // h.set('Cross-Origin-Resource-Policy', CORP); // 如果 worker 与目标域名在同一个根域名下，可以考虑打开
-    h.set('Access-Control-Allow-Origin',  refererOrigin);
-    h.set('Access-Control-Allow-Credentials', 'true');
-    h.set('Vary',                         'Origin');          // 避免缓存污染
-    h.set('Access-Control-Expose-Headers','Content-Length, Content-Range, Accept-Ranges');
+    
+    // 为白名单域名自动添加CORS头，即使没有Referer/Origin
+    if (isDirectAccessFromWhitelist && !refererOrigin) {
+      // 找到匹配的白名单域名，设置为允许的Origin
+      let matchedDomain = '';
+      for (const allowedDomain of ALLOWED) {
+        if (normalizedRequestHost.includes(allowedDomain)) {
+          matchedDomain = allowedDomain;
+          break;
+        }
+      }
+      
+      // 自动添加所需的CORS头
+      h.set('Access-Control-Allow-Origin', `https://${matchedDomain}`);
+      h.set('Access-Control-Allow-Credentials', 'true');
+      h.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+    } else {
+      // 常规情况
+      h.set('Access-Control-Allow-Origin', refererOrigin);
+      h.set('Access-Control-Allow-Credentials', 'true');
+      h.set('Vary', 'Origin'); // 避免缓存污染
+      h.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+    }
 
     if (range && opts?.range) {
       const size   = obj.size;
