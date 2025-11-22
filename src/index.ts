@@ -1,5 +1,6 @@
 // 修改这个列表，更新为自己的 domain list
 const ALLOWED = new Set([
+  'www.cycani.org',
   'www.dm147.cc',
   'play.dm147.cc'
 ]);
@@ -53,7 +54,7 @@ export default {
 
     /* 4. 生成响应 + CORS/CORP 头 */
     const h = new Headers(obj.httpMetadata);
-    h.set('Cross-Origin-Resource-Policy', CORP); // 如果 worker 与目标域名在同一个根域名下，可以考虑打开
+    // h.set('Cross-Origin-Resource-Policy', CORP); // 如果 worker 与目标域名在同一个根域名下，可以考虑打开
     h.set('Access-Control-Allow-Origin',  refererOrigin);
     h.set('Vary',                         'Origin');          // 避免缓存污染
     h.set('Access-Control-Expose-Headers','Content-Length, Content-Range, Accept-Ranges');
