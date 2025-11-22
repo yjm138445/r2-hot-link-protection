@@ -1,6 +1,5 @@
 // 修改这个列表，更新为自己的 domain list
 const ALLOWED = new Set([
-  'www.cycani.org',
   'www.dm147.cc',
   'play.dm147.cc'
 ]);
