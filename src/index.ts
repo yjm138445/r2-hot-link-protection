@@ -60,19 +60,37 @@ export default {
 
     // 获取请求的Host头，用于检查是否是直接从白名单域名访问
     const requestHost = request.headers.get('Host') || '';
+    const normalizedRequestHost = requestHost.toLowerCase(); // 标准化Host头为小写
     
     // 3. 增强的域名检查：
     //    - 允许带有白名单域名Referer/Origin的请求访问
     //    - 允许直接从白名单域名访问（即使没有Referer）
     //    - 阻止没有Referer且不是白名单域名的请求
     const isRefererAllowed = refererHost && ALLOWED.has(refererHost);
-    const isDirectAccessFromWhitelist = !refererHost && ALLOWED.has(requestHost);
+    
+    // 增强的Host头检查逻辑，先检查完全匹配，再检查部分匹配
+    let isDirectAccessFromWhitelist = false;
+    if (!refererHost) {
+      // 首先检查是否完全匹配
+      isDirectAccessFromWhitelist = ALLOWED.has(normalizedRequestHost);
+      
+      // 如果不完全匹配，检查是否部分包含（处理子域名或端口情况）
+      if (!isDirectAccessFromWhitelist) {
+        for (const allowedDomain of ALLOWED) {
+          if (normalizedRequestHost.includes(allowedDomain)) {
+            isDirectAccessFromWhitelist = true;
+            break;
+          }
+        }
+      }
+    }
+    
     const isAllowed = isRefererAllowed || isDirectAccessFromWhitelist;
     
     console.log('Access check:', { 
       isAllowed, 
       refererHost, 
-      requestHost, 
+      normalizedRequestHost, 
       isRefererAllowed, 
       isDirectAccessFromWhitelist 
     });
@@ -83,11 +101,11 @@ export default {
       if (refererHost) {
         blockedReason = `blocked: ${refererHost} (not in whitelist)`;
       } else if (refererHeader || originHeader) {
-        blockedReason = `blocked: could not validate domain from headers`;
+        blockedReason = `blocked`;
       } else {
-        blockedReason = 'blocked: no referer and not direct access from whitelist domain';
+        blockedReason = 'blocked';
       }
-      console.log(blockedReason, { refererHeader, originHeader, requestHost });
+      console.log(blockedReason, { refererHeader, originHeader, normalizedRequestHost });
       return new Response(blockedReason, {
         status: 403,
         headers: {
