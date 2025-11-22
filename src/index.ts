@@ -171,24 +171,28 @@ export default {
     const h = new Headers(obj.httpMetadata);
     // h.set('Cross-Origin-Resource-Policy', CORP); // 如果 worker 与目标域名在同一个根域名下，可以考虑打开
     
-    // 为白名单域名自动添加CORS头，即使没有Referer/Origin
-    if (isDirectAccessFromWhitelist && !refererOrigin) {
-      // 找到匹配的白名单域名，设置为允许的Origin
-      let matchedDomain = '';
+    // 找到匹配的白名单域名，用于设置CORS头
+    let matchedDomain = '';
+    if (!refererOrigin) {
+      // 对于没有Referer/Origin的请求，从Host头中查找匹配的白名单域名
       for (const allowedDomain of ALLOWED) {
-        if (normalizedRequestHost.includes(allowedDomain)) {
+        if (normalizedRequestHost.includes(allowedDomain) || allowedDomain.includes(normalizedRequestHost)) {
           matchedDomain = allowedDomain;
           break;
         }
       }
-      
-      // 自动添加所需的CORS头
+    }
+    
+    // 统一添加CORS头，确保所有白名单域名请求都能获得正确的CORS设置
+    if (matchedDomain) {
+      // 没有Referer/Origin时，使用匹配的白名单域名
       h.set('Access-Control-Allow-Origin', `https://${matchedDomain}`);
       h.set('Access-Control-Allow-Credentials', 'true');
       h.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+      console.log('Added CORS headers for whitelist domain:', matchedDomain);
     } else {
-      // 常规情况
-      h.set('Access-Control-Allow-Origin', refererOrigin);
+      // 常规情况，使用Referer/Origin
+      h.set('Access-Control-Allow-Origin', refererOrigin || '*');
       h.set('Access-Control-Allow-Credentials', 'true');
       h.set('Vary', 'Origin'); // 避免缓存污染
       h.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
